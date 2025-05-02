@@ -1,334 +1,328 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { Slider } from "@/components/ui/slider"
-import { SettingsModal } from "@/components/settings-modal"
-import { soundManager } from "@/utils/sound-manager"
-import { t } from "@/utils/i18n"
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { SettingsModal } from "@/components/settings-modal";
+import { soundManager } from "@/utils/sound-manager";
+import { t } from "@/utils/i18n";
 
 // Tipos
-type Suit = "hearts" | "diamonds" | "clubs" | "spades"
-type Rank = "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K" | "A"
+type Suit = "hearts" | "diamonds" | "clubs" | "spades";
+type Rank =
+  | "2"
+  | "3"
+  | "4"
+  | "5"
+  | "6"
+  | "7"
+  | "8"
+  | "9"
+  | "10"
+  | "J"
+  | "Q"
+  | "K"
+  | "A";
 type PlayingCard = {
-  id: string // Identificador único para cada carta
-  suit: Suit
-  rank: Rank
-  value: number
-  hidden?: boolean
-}
+  id: string;
+  suit: Suit;
+  rank: Rank;
+  value: number;
+  hidden?: boolean;
+};
 
-type GameState = "betting" | "playerTurn" | "dealerTurn" | "gameOver"
-type GameResult = "win" | "lose" | "push" | "blackjack" | null
+type GameState = "betting" | "playerTurn" | "dealerTurn" | "gameOver";
+type GameResult = "win" | "lose" | "push" | "blackjack" | null;
 
 // Constantes
-const INITIAL_BALANCE = 1000
-const MIN_BET = 10
-const MAX_BET = 500
+const INITIAL_BALANCE = 10_000;
+const MIN_BET = 10;
+const MAX_BET = 1000_000_000;
+
+// Función para mezclar el mazo
+const shuffleDeck = (deck: PlayingCard[]) => {
+  const newDeck = [...deck];
+  for (let i = newDeck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
+  }
+  soundManager.play("shuffle");
+  return newDeck;
+};
 
 export default function BlackjackGame() {
   // Estado del juego
-  const [deck, setDeck] = useState<PlayingCard[]>([])
-  const [playerHand, setPlayerHand] = useState<PlayingCard[]>([])
-  const [dealerHand, setDealerHand] = useState<PlayingCard[]>([])
-  const [gameState, setGameState] = useState<GameState>("betting")
-  const [balance, setBalance] = useState(INITIAL_BALANCE)
-  const [currentBet, setCurrentBet] = useState(MIN_BET)
-  const [result, setResult] = useState<GameResult>(null)
-  const [languageKey, setLanguageKey] = useState(0) // Para forzar re-renderizado al cambiar idioma
+  const [deck, setDeck] = useState<PlayingCard[]>([]);
+  const [playerHand, setPlayerHand] = useState<PlayingCard[]>([]);
+  const [dealerHand, setDealerHand] = useState<PlayingCard[]>([]);
+  const [gameState, setGameState] = useState<GameState>("betting");
+  const [balance, setBalance] = useState(INITIAL_BALANCE);
+  const [currentBet, setCurrentBet] = useState(MIN_BET);
+  const [result, setResult] = useState<GameResult>(null);
+  const [languageKey, setLanguageKey] = useState(0);
 
   // Efecto para escuchar cambios de idioma
   useEffect(() => {
-    const handleLanguageChange = () => setLanguageKey((prev) => prev + 1)
-    window.addEventListener("languageChanged", handleLanguageChange)
-    return () => window.removeEventListener("languageChanged", handleLanguageChange)
-  }, [])
+    const handleLanguageChange = () => setLanguageKey((prev) => prev + 1);
+    window.addEventListener("languageChanged", handleLanguageChange);
+    return () =>
+      window.removeEventListener("languageChanged", handleLanguageChange);
+  }, []);
 
   // Crear y mezclar el mazo
   const createDeck = useCallback(() => {
-    const suits: Suit[] = ["hearts", "diamonds", "clubs", "spades"]
-    const ranks: Rank[] = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
-    const values = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11]
+    const suits: Suit[] = ["hearts", "diamonds", "clubs", "spades"];
+    const ranks: Rank[] = [
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "J",
+      "Q",
+      "K",
+      "A",
+    ];
+    const values = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
 
-    const newDeck: PlayingCard[] = []
-    const usedIds = new Set<string>() // Para verificar duplicados
+    const newDeck: PlayingCard[] = [];
+    const usedIds = new Set<string>();
 
-    // Crear 52 cartas únicas (13 rangos × 4 palos)
     for (let s = 0; s < suits.length; s++) {
       for (let r = 0; r < ranks.length; r++) {
-        const id = `${suits[s]}-${ranks[r]}`
-
-        // Verificar que no haya duplicados
-        if (usedIds.has(id)) {
-          console.error(`Error: Carta duplicada ${id}`)
-          continue
+        const id = `${suits[s]}-${ranks[r]}`;
+        if (!usedIds.has(id)) {
+          usedIds.add(id);
+          newDeck.push({
+            id,
+            suit: suits[s],
+            rank: ranks[r],
+            value: values[r],
+          });
         }
-
-        usedIds.add(id)
-
-        newDeck.push({
-          id,
-          suit: suits[s],
-          rank: ranks[r],
-          value: values[r],
-        })
       }
     }
 
-    // Verificar que tenemos exactamente 52 cartas
-    if (newDeck.length !== 52) {
-      console.error(`Error: El mazo tiene ${newDeck.length} cartas en lugar de 52`)
-    }
-
-    // Mezclar el mazo usando el algoritmo Fisher-Yates
-    for (let i = newDeck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]]
-    }
-
-    soundManager.play("shuffle")
-    return newDeck
-  }, [])
+    return shuffleDeck(newDeck);
+  }, []);
 
   // Inicializar el juego
   useEffect(() => {
-    setDeck(createDeck())
-  }, [createDeck])
+    setDeck(createDeck());
+  }, [createDeck]);
 
   // Calcular el valor de una mano
   const calculateHandValue = (hand: PlayingCard[]) => {
-    let value = 0
-    let aces = 0
+    let value = 0;
+    let aces = 0;
 
     for (const card of hand) {
       if (!card.hidden) {
-        value += card.value
-        if (card.rank === "A") aces++
+        value += card.value;
+        if (card.rank === "A") aces++;
       }
     }
 
-    // Ajustar el valor de los ases si es necesario
     while (value > 21 && aces > 0) {
-      value -= 10
-      aces--
+      value -= 10;
+      aces--;
     }
 
-    return value
-  }
+    return value;
+  };
 
-  // Repartir una carta
+  // Repartir una carta con shuffle previo
   const dealCard = (hidden = false) => {
-    if (deck.length === 0) return null
+    if (deck.length === 0) return null;
 
-    const newDeck = [...deck]
-    const card = newDeck.pop()!
-    if (hidden) card.hidden = true
-    setDeck(newDeck)
+    // Shuffle antes de repartir
+    const shuffledDeck = shuffleDeck(deck);
+    setDeck(shuffledDeck);
 
-    // Reproducir sonido de carta
-    soundManager.play("card")
+    const newDeck = [...shuffledDeck];
+    const card = newDeck.pop()!;
+    if (hidden) card.hidden = true;
+    setDeck(newDeck);
 
-    return card
-  }
+    soundManager.play("card");
+    return card;
+  };
 
   // Iniciar el juego
   const startGame = () => {
-    if (balance < currentBet) return
+    if (balance < currentBet) return;
 
-    soundManager.play("bet")
+    soundManager.play("bet");
+    setBalance(balance - currentBet);
+    const gameDeck = createDeck();
 
-    // Restar la apuesta del saldo
-    setBalance(balance - currentBet)
+    const newPlayerHand: PlayingCard[] = [];
+    const newDealerHand: PlayingCard[] = [];
 
-    // Crear un nuevo mazo para cada juego
-    const gameDeck = createDeck()
-
-    // Repartir las cartas iniciales
-    const newPlayerHand: PlayingCard[] = []
-    const newDealerHand: PlayingCard[] = []
-
-    // Repartir SOLO 1 carta al jugador
     if (gameDeck.length > 0) {
-      const playerCard = gameDeck.pop()!
-      newPlayerHand.push(playerCard)
+      const playerCard = gameDeck.pop()!;
+      newPlayerHand.push(playerCard);
     }
 
-    // Repartir 2 cartas al crupier (una oculta)
     if (gameDeck.length > 1) {
-      const dealerCard1 = gameDeck.pop()!
-      const dealerCard2 = gameDeck.pop()!
-      dealerCard2.hidden = true // Ocultar la segunda carta
-      newDealerHand.push(dealerCard1, dealerCard2)
+      const dealerCard1 = gameDeck.pop()!;
+      const dealerCard2 = gameDeck.pop()!;
+      dealerCard2.hidden = true;
+      newDealerHand.push(dealerCard1, dealerCard2);
     }
 
-    // Actualizar el estado
-    setDeck(gameDeck)
-    setPlayerHand(newPlayerHand)
-    setDealerHand(newDealerHand)
-    setGameState("playerTurn")
-  }
+    setDeck(gameDeck);
+    setPlayerHand(newPlayerHand);
+    setDealerHand(newDealerHand);
+    setGameState("playerTurn");
+  };
 
   // Pedir carta
   const hit = () => {
-    // Verificar si necesitamos un nuevo mazo
     if (deck.length === 0) {
-      setDeck(createDeck())
-      return
+      setDeck(createDeck());
+      return;
     }
 
-    const card = dealCard()
-    if (!card) return
+    const card = dealCard();
+    if (!card) return;
 
-    const newHand = [...playerHand, card]
-    setPlayerHand(newHand)
+    const newHand = [...playerHand, card];
+    setPlayerHand(newHand);
 
-    const handValue = calculateHandValue(newHand)
+    const handValue = calculateHandValue(newHand);
     if (handValue > 21) {
-      // Jugador se pasó
-      setGameState("gameOver")
-      setResult("lose")
-      soundManager.play("lose")
+      setGameState("gameOver");
+      setResult("lose");
+      soundManager.play("lose");
     } else if (handValue === 21) {
-      // Jugador tiene 21, turno del crupier
-      dealerPlay(newHand, dealerHand)
+      dealerPlay(newHand, dealerHand);
     }
-  }
+  };
 
   // Plantarse
   const stand = () => {
-    dealerPlay(playerHand, dealerHand)
-  }
+    dealerPlay(playerHand, dealerHand);
+  };
 
   // Doblar apuesta
   const doubleDown = () => {
-    // Verificar si necesitamos un nuevo mazo
     if (deck.length === 0) {
-      setDeck(createDeck())
-      return
+      setDeck(createDeck());
+      return;
     }
 
-    // Cambiar esta línea para permitir doblar con solo 1 carta
-    // En lugar de verificar playerHand.length > 2, verificamos > 1
-    if (balance < currentBet || playerHand.length > 1) return
+    if (balance < currentBet || playerHand.length > 1) return;
 
-    soundManager.play("doubleDown")
+    soundManager.play("doubleDown");
+    setBalance(balance - currentBet);
+    setCurrentBet(currentBet * 2);
 
-    // Doblar la apuesta
-    setBalance(balance - currentBet)
-    setCurrentBet(currentBet * 2)
+    const card = dealCard();
+    if (!card) return;
 
-    // Repartir una sola carta más
-    const card = dealCard()
-    if (!card) return
-
-    const newHand = [...playerHand, card]
-    setPlayerHand(newHand)
-
-    // Pasar al turno del crupier
-    dealerPlay(newHand, dealerHand)
-  }
+    const newHand = [...playerHand, card];
+    setPlayerHand(newHand);
+    dealerPlay(newHand, dealerHand);
+  };
 
   // Turno del crupier
-  const dealerPlay = (playerCards: PlayingCard[], dealerCards: PlayingCard[]) => {
-    setGameState("dealerTurn")
+  const dealerPlay = (
+    playerCards: PlayingCard[],
+    dealerCards: PlayingCard[]
+  ) => {
+    setGameState("dealerTurn");
 
-    // Revelar la carta oculta del crupier
-    const newDealerHand = [...dealerCards]
+    const newDealerHand = [...dealerCards];
     if (newDealerHand[1]?.hidden) {
-      newDealerHand[1].hidden = false
+      newDealerHand[1].hidden = false;
     }
 
-    let currentDealerHand = [...newDealerHand]
-    const playerValue = calculateHandValue(playerCards)
+    let currentDealerHand = [...newDealerHand];
+    const playerValue = calculateHandValue(playerCards);
 
-    // Si el jugador se pasó, el crupier gana automáticamente
     if (playerValue > 21) {
-      setDealerHand(currentDealerHand)
-      endGame(playerCards, currentDealerHand)
-      return
+      setDealerHand(currentDealerHand);
+      endGame(playerCards, currentDealerHand);
+      return;
     }
 
-    // El crupier pide cartas hasta tener 17 o más
-    let dealerValue = calculateHandValue(currentDealerHand)
+    let dealerValue = calculateHandValue(currentDealerHand);
 
-    // Simulamos el proceso de forma asíncrona para mostrar animaciones
     const dealerDrawCard = () => {
-      // Verificar si necesitamos un nuevo mazo
       if (deck.length === 0) {
-        const newDeck = createDeck()
-        setDeck(newDeck)
+        const newDeck = createDeck();
+        setDeck(newDeck);
       }
 
       if (dealerValue < 17) {
-        const card = dealCard()
+        const card = dealCard();
         if (card) {
-          currentDealerHand = [...currentDealerHand, card]
-          setDealerHand(currentDealerHand)
-          dealerValue = calculateHandValue(currentDealerHand)
-
-          // Continuar después de un breve retraso (más rápido)
-          setTimeout(dealerDrawCard, 300)
+          currentDealerHand = [...currentDealerHand, card];
+          setDealerHand(currentDealerHand);
+          dealerValue = calculateHandValue(currentDealerHand);
+          setTimeout(dealerDrawCard, 300);
         }
       } else {
-        // El crupier terminó de pedir cartas
-        endGame(playerCards, currentDealerHand)
+        endGame(playerCards, currentDealerHand);
       }
-    }
+    };
 
-    // Iniciar el proceso después de mostrar la carta oculta (más rápido)
-    setDealerHand(currentDealerHand)
-    setTimeout(dealerDrawCard, 300)
-  }
+    setDealerHand(currentDealerHand);
+    setTimeout(dealerDrawCard, 300);
+  };
 
-  // Finalizar el juego y determinar el resultado
+  // Finalizar el juego
   const endGame = (playerCards: PlayingCard[], dealerCards: PlayingCard[]) => {
-    const playerValue = calculateHandValue(playerCards)
-    const dealerValue = calculateHandValue(dealerCards)
+    const playerValue = calculateHandValue(playerCards);
+    const dealerValue = calculateHandValue(dealerCards);
 
-    let gameResult: GameResult = null
-    let winnings = 0
+    let gameResult: GameResult = null;
+    let winnings = 0;
 
-    // Determinar el resultado
     if (playerValue > 21) {
-      gameResult = "lose"
+      gameResult = "lose";
     } else if (dealerValue > 21) {
-      gameResult = "win"
-      winnings = currentBet * 2
-      soundManager.play("win")
+      gameResult = "win";
+      winnings = currentBet * 2;
+      soundManager.play("win");
     } else if (playerValue > dealerValue) {
       if (playerValue === 21 && playerCards.length === 2) {
-        gameResult = "blackjack"
-        winnings = currentBet * 2.5 // Pago 3:2 para blackjack
-        soundManager.play("win")
+        gameResult = "blackjack";
+        winnings = currentBet * 2.5;
+        soundManager.play("win");
       } else {
-        gameResult = "win"
-        winnings = currentBet * 2
-        soundManager.play("win")
+        gameResult = "win";
+        winnings = currentBet * 2;
+        soundManager.play("win");
       }
     } else if (playerValue < dealerValue) {
-      gameResult = "lose"
-      soundManager.play("lose")
+      gameResult = "lose";
+      soundManager.play("lose");
     } else {
-      gameResult = "push"
-      winnings = currentBet // Devolver la apuesta en caso de empate
+      gameResult = "push";
+      winnings = currentBet;
     }
 
-    setBalance(balance + winnings)
-    setResult(gameResult)
-    setGameState("gameOver")
-  }
+    setBalance(balance + winnings);
+    setResult(gameResult);
+    setGameState("gameOver");
+  };
 
-  // Iniciar un nuevo juego
+  // Nuevo juego
   const newGame = () => {
-    // Siempre crear un nuevo mazo completo para cada juego
-    setDeck(createDeck())
-    setPlayerHand([])
-    setDealerHand([])
-    setGameState("betting")
-    setResult(null)
-    setCurrentBet(MIN_BET)
-  }
+    setDeck(createDeck());
+    setPlayerHand([]);
+    setDealerHand([]);
+    setGameState("betting");
+    setResult(null);
+    setCurrentBet(MIN_BET);
+  };
 
   // Renderizar una carta
   const renderCard = (card: PlayingCard, index: number, isDealer = false) => {
@@ -346,16 +340,19 @@ export default function BlackjackGame() {
             <div className="text-white text-2xl font-bold">?</div>
           </div>
         </motion.div>
-      )
+      );
     }
 
-    const color = card.suit === "hearts" || card.suit === "diamonds" ? "text-red-600" : "text-black"
+    const color =
+      card.suit === "hearts" || card.suit === "diamonds"
+        ? "text-red-600"
+        : "text-black";
     const suitSymbol = {
       hearts: "♥",
       diamonds: "♦",
       clubs: "♣",
       spades: "♠",
-    }[card.suit]
+    }[card.suit];
 
     return (
       <motion.div
@@ -370,32 +367,36 @@ export default function BlackjackGame() {
           <div>{card.rank}</div>
           <div>{suitSymbol}</div>
         </div>
-        <div className={`text-center text-2xl ${color} flex-grow flex items-center justify-center`}>{suitSymbol}</div>
+        <div
+          className={`text-center text-2xl ${color} flex-grow flex items-center justify-center`}
+        >
+          {suitSymbol}
+        </div>
         <div className={`text-right ${color} rotate-180`}>
           <div>{card.rank}</div>
           <div>{suitSymbol}</div>
         </div>
       </motion.div>
-    )
-  }
+    );
+  };
 
-  // Renderizar el mensaje de resultado
+  // Renderizar resultado
   const renderResult = () => {
-    if (!result) return null
+    if (!result) return null;
 
     const messages = {
       win: t("win"),
       lose: t("lose"),
       push: t("push"),
       blackjack: t("blackjack"),
-    }
+    };
 
     const colors = {
       win: "text-green-600",
       lose: "text-red-600",
       push: "text-blue-600",
       blackjack: "text-purple-600",
-    }
+    };
 
     return (
       <motion.div
@@ -406,12 +407,14 @@ export default function BlackjackGame() {
       >
         {messages[result]}
       </motion.div>
-    )
-  }
+    );
+  };
 
-  // Renderizar el componente principal
   return (
-    <div key={languageKey} className="min-h-screen bg-green-800 flex flex-col items-center justify-center p-4">
+    <div
+      key={languageKey}
+      className="min-h-screen bg-green-800 flex flex-col items-center justify-center p-4"
+    >
       <SettingsModal />
 
       <h1 className="text-4xl font-bold text-white mb-8">{t("title")}</h1>
@@ -440,7 +443,9 @@ export default function BlackjackGame() {
                 />
                 <span className="text-white">{Math.min(MAX_BET, balance)}</span>
               </div>
-              <div className="text-center text-2xl text-white mb-6">{currentBet}</div>
+              <div className="text-center text-2xl text-white mb-6">
+                {currentBet}
+              </div>
               <div className="flex justify-center">
                 <Button
                   onClick={startGame}
@@ -467,9 +472,13 @@ export default function BlackjackGame() {
                 </h2>
                 <div className="flex justify-center items-center h-40 relative">
                   {dealerHand.length > 0 ? (
-                    dealerHand.map((card, index) => renderCard(card, index, true))
+                    dealerHand.map((card, index) =>
+                      renderCard(card, index, true)
+                    )
                   ) : (
-                    <div className="text-white text-lg">Esperando cartas...</div>
+                    <div className="text-white text-lg">
+                      Esperando cartas...
+                    </div>
                   )}
                 </div>
               </div>
@@ -486,7 +495,9 @@ export default function BlackjackGame() {
                   {playerHand.length > 0 ? (
                     playerHand.map((card, index) => renderCard(card, index))
                   ) : (
-                    <div className="text-white text-lg">Esperando cartas...</div>
+                    <div className="text-white text-lg">
+                      Esperando cartas...
+                    </div>
                   )}
                 </div>
               </div>
@@ -495,10 +506,16 @@ export default function BlackjackGame() {
               <div className="flex justify-center gap-4">
                 {gameState === "playerTurn" && (
                   <>
-                    <Button onClick={hit} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full">
+                    <Button
+                      onClick={hit}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full"
+                    >
                       {t("hit")}
                     </Button>
-                    <Button onClick={stand} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full">
+                    <Button
+                      onClick={stand}
+                      className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full"
+                    >
                       {t("stand")}
                     </Button>
                     <Button
@@ -533,6 +550,5 @@ export default function BlackjackGame() {
         </motion.div>
       </div>
     </div>
-  )
+  );
 }
-
